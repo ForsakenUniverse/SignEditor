@@ -1,0 +1,21 @@
+name: SignEditor
+main: me.meiamsome.signeditor.SignEditor
+version: 1.04
+author: meiamsome
+commands:
+ edit:
+  aliases: editsign
+  description: Edit a sign
+permisions:
+ se.edit:
+  default: op
+  description: Allows you to edit your signs
+ se.editCol:
+  default: op
+  description: Allows you to edit signs with colours
+ se.force:
+  default: op
+  description: Allows you to force a sign edit (Overrides plugins)
+ se.dforce:
+  default: false
+  description: Skip the bukkit plugins entirely (Can cause issues)
