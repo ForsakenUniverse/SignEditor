@@ -138,10 +138,11 @@ public class SignEditor extends JavaPlugin implements Listener {
 				for(int i = 1; i < args.length; i++) message += " "+args[i];
 				//if(play.hasPermission("se.editCol")) message = colourize(message);
 				message = message.trim();
+				/* TODO: There's got to be a nice way to do this? 
 				if(message.length() > 15) {
 					sender.sendMessage(ChatColor.AQUA + "[SignEditor]" + ChatColor.RED + " Line is too long.");
 					return true;
-				}
+				} */
 				if(doubleForce) {
 					s.setLine(line, colourize(message));
 					s.update();
