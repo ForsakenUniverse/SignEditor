@@ -1,6 +1,6 @@
 name: SignEditor
 main: me.meiamsome.signeditor.SignEditor
-version: 1.04
+version: 1.05
 author: meiamsome
 commands:
  edit:
@@ -19,3 +19,6 @@ permisions:
  se.dforce:
   default: false
   description: Skip the bukkit plugins entirely (Can cause issues)
+ se.reload:
+  default: op
+  description: Allows players to reload the config

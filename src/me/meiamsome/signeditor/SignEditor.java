@@ -2,6 +2,7 @@ package me.meiamsome.signeditor;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Set;
 
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
@@ -11,12 +12,15 @@ import org.bukkit.block.Block;
 import org.bukkit.block.Sign;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
+import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.block.SignChangeEvent;
+import org.bukkit.event.player.PlayerAnimationEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.material.Attachable;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -24,15 +28,51 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 public class SignEditor extends JavaPlugin implements Listener {
 	HashMap<String, String[]> copies = new HashMap<String, String[]>();
+	HashMap<String, List<String>> ignoredPlugins = new HashMap<String, List<String>>();
 	
 	@Override
 	public void onEnable() {
 		getServer().getPluginManager().registerEvents(this, this);
+	    saveDefaultConfig();
+	    loadConfig();
+	}
+	
+	public void loadConfig() {
+	    FileConfiguration config = getConfig();
+	    ConfigurationSection ignored = config.getConfigurationSection("ignoredPlugins");
+	    ignoredPlugins.clear();
+	    if(ignored != null) {
+	        for(String s: ignored.getKeys(false)) {
+	            ConfigurationSection sec = ignored.getConfigurationSection(s);
+	            if(sec == null) {
+	                getLogger().warning("[SignEditor] "+s+" in ignoredPlugins is not a section!");
+	                continue;
+	            }
+	            String perm = sec.getString("permission");
+                if(perm == null) {
+                    getLogger().warning("[SignEditor] "+s+".permission in ignoredPlugins is not a sting!");
+                    continue;
+                }
+                List<String> classes = sec.getStringList("classes");
+                if(classes == null) {
+                    getLogger().warning("[SignEditor] "+s+".classes in ignoredPlugins is not a list of strings!");
+                    continue;
+                }
+                ignoredPlugins.put(perm, classes);
+	        }
+	    } else {
+	        getLogger().warning("[SignEditor] No ignoredPlugins section in config");
+	    }
 	}
 	
 	@Override
 	public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
 		if(command.getName().equals("edit")) {
+		    if(sender.hasPermission("se.reload") && args.length == 1 && args[0].equalsIgnoreCase("reload")) {
+		        loadConfig();
+		        sender.sendMessage("Config reloaded");
+		        return true;
+		    }
 			if(!(sender instanceof Player)) {
 				sender.sendMessage(ChatColor.AQUA + "[SignEditor]" + ChatColor.RED + " You cannot use this from the console.");
 				return true;
@@ -42,7 +82,7 @@ public class SignEditor extends JavaPlugin implements Listener {
 				sender.sendMessage(ChatColor.AQUA + "[SignEditor]" + ChatColor.RED + " You don't have the permission to do this.");
 				return true;
 			}
-			Block b = play.getTargetBlock(null, 10);
+			Block b = play.getTargetBlock((Set<Material>)null, 10);
 			if(b == null) {
 				sender.sendMessage(ChatColor.AQUA + "[SignEditor]" + ChatColor.RED + " You are not targeting any block.");
 				return true;
@@ -114,10 +154,46 @@ public class SignEditor extends JavaPlugin implements Listener {
 				lines[line] = message;
 			}
 			String[] oldLines = lines.clone();
+			
+			final List<String> myIgnoredP = new ArrayList<String>();
+			for(String key: ignoredPlugins.keySet()) {
+			    if(play.hasPermission(key)) myIgnoredP.addAll(ignoredPlugins.get(key));
+			}
+			
 			BlockBreakEvent ev1 = new BlockBreakEvent(b, play) {
+			    @Override
+			    public boolean isCancelled() {
+			        if(super.isCancelled()) return true;
+			        if(myIgnoredP.size() == 0) return false;
+			        try {
+			            throw new Exception();
+			        } catch(Exception e) {
+			            for(StackTraceElement elem: e.getStackTrace()) {
+			                for(String cName: myIgnoredP) {
+			                    if(elem.getClassName().startsWith(cName)) {
+			                        return true;
+			                    }
+			                }
+			            }
+			        }
+			        return false;
+			    }
 				@Override
 				public void setCancelled(boolean cancel) {
 					if(!force) {
+	                    if(myIgnoredP.size() != 0) {
+    	                    try {
+    	                        throw new Exception();
+    	                    } catch(Exception e) {
+    	                        for(StackTraceElement elem: e.getStackTrace()) {
+    	                            for(String cName: myIgnoredP) {
+    	                                if(elem.getClassName().startsWith(cName)) {
+    	                                    return;
+    	                                }
+    	                            }
+    	                        }
+    	                    }
+	                    }
 						super.setCancelled(cancel);
 						return;
 					}
@@ -127,7 +203,15 @@ public class SignEditor extends JavaPlugin implements Listener {
 			Bukkit.getPluginManager().callEvent(ev1);
 			if(ev1.isCancelled()) {
 				play.sendMessage(ChatColor.AQUA + "[SignEditor]" + ChatColor.RED + " Sign break cancelled by plugin.");
+				return true;
 			}
+			
+			//NCP FIX
+			PlayerAnimationEvent animEv = new PlayerAnimationEvent(play);
+			Bukkit.getPluginManager().callEvent(animEv);
+			
+			//END NCP FIX
+			
 			s.setLine(0, "");
 			s.setLine(1, "");
 			s.setLine(2, "");
@@ -136,9 +220,39 @@ public class SignEditor extends JavaPlugin implements Listener {
 			Location spawn = b.getWorld().getSpawnLocation();
 			boolean canBuild = spawnRadius <= 0 || play.isOp() || Math.max(Math.abs(b.getX()-spawn.getBlockX()), Math.abs(b.getZ()-spawn.getBlockZ())) > spawnRadius;
 			BlockPlaceEvent ev2 = new BlockPlaceEvent(b, b.getState(), b.getRelative(((Attachable)b.getState().getData()).getAttachedFace()), new ItemStack(Material.SIGN), play, canBuild) {
+                @Override
+                public boolean isCancelled() {
+                    if(super.isCancelled()) return true;
+                    if(myIgnoredP.size() == 0) return false;
+                    try {
+                        throw new Exception();
+                    } catch(Exception e) {
+                        for(StackTraceElement elem: e.getStackTrace()) {
+                            for(String cName: myIgnoredP) {
+                                if(elem.getClassName().startsWith(cName)) {
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+                    return false;
+                }
 				@Override
 				public void setCancelled(boolean cancel) {
 					if(!force) {
+                        if(myIgnoredP.size() != 0) {
+                            try {
+                                throw new Exception();
+                            } catch(Exception e) {
+                                for(StackTraceElement elem: e.getStackTrace()) {
+                                    for(String cName: myIgnoredP) {
+                                        if(elem.getClassName().startsWith(cName)) {
+                                            return;
+                                        }
+                                    }
+                                }
+                            }
+                        }
 						super.setCancelled(cancel);
 						return;
 					}
@@ -148,13 +262,44 @@ public class SignEditor extends JavaPlugin implements Listener {
 			Bukkit.getPluginManager().callEvent(ev2);
 			if(ev2.isCancelled()) {
 				play.sendMessage(ChatColor.AQUA + "[SignEditor]" + ChatColor.RED + " Sign place cancelled by plugin.");
+				return true;
 			}
 			
 			SignChangeEvent ev3 = new SignChangeEvent(b, play, lines.clone()) {
+                @Override
+                public boolean isCancelled() {
+                    if(super.isCancelled()) return true;
+                    if(myIgnoredP.size() == 0) return false;
+                    try {
+                        throw new Exception();
+                    } catch(Exception e) {
+                        for(StackTraceElement elem: e.getStackTrace()) {
+                            for(String cName: myIgnoredP) {
+                                if(elem.getClassName().startsWith(cName)) {
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+                    return false;
+                }
 				boolean info = false;
 				@Override
 				public void setCancelled(boolean cancel) {
 					if(!force) {
+                        if(myIgnoredP.size() != 0) {
+                            try {
+                                throw new Exception();
+                            } catch(Exception e) {
+                                for(StackTraceElement elem: e.getStackTrace()) {
+                                    for(String cName: myIgnoredP) {
+                                        if(elem.getClassName().startsWith(cName)) {
+                                            return;
+                                        }
+                                    }
+                                }
+                            }
+                        }
 						super.setCancelled(cancel);
 						return;
 					}
@@ -166,6 +311,7 @@ public class SignEditor extends JavaPlugin implements Listener {
 						super.setLine(index, line);
 						return;
 					}
+					if(getLine(index).equalsIgnoreCase(line)) return;
 					if(!info) play.sendMessage(ChatColor.AQUA + "[SignEditor] Forced Bypass of SignChangeEvent modification.");
 					info = true;
 					play.sendMessage(ChatColor.AQUA + "[SignEditor] (Line "+index+" change to "+line+").");
@@ -177,7 +323,11 @@ public class SignEditor extends JavaPlugin implements Listener {
 				String[] changedLines = ev3.getLines();
 				boolean changed = false, startDiff = false;
 				for(int i = 0; i < changedLines.length; i++) {
-					s.setLine(i, changedLines[i]);
+				    if(force) {
+				        String curLine = lines[i];
+				        if(play.hasPermission("se.editCol")) curLine = colourize(curLine);
+				        s.setLine(i, curLine);
+				    } else s.setLine(i, changedLines[i]);
 					if(!changedLines[i].equals(lines[i])) changed = true;
 					if(!changedLines[i].equals(oldLines[i])) startDiff = true;
 				}
@@ -208,16 +358,17 @@ public class SignEditor extends JavaPlugin implements Listener {
 				sender.sendMessage(ChatColor.AQUA + "[SignEditor]" + ChatColor.RED + " You don't have the permission to do this.");
 				return null;
 			}
-			Block b = play.getTargetBlock(null, 10);
+			Block b = play.getTargetBlock((Set<Material>) null, 10);
+			List<String> ret = new ArrayList<String>();
+			if(args.length == 0 && sender.hasPermission("se.reload")) ret.add("reload");
 			if(b == null) {
 				sender.sendMessage(ChatColor.AQUA + "[SignEditor]" + ChatColor.RED + " You are not targeting any block.");
-				return null;
+				return ret;
 			}
 			if(!(b.getState() instanceof Sign)) {
 				sender.sendMessage(ChatColor.AQUA + "[SignEditor]" + ChatColor.RED + " You must be looking at a sign.");
-				return null;
+				return ret;
 			}
-			List<String> ret = new ArrayList<String>();
 			if(args.length == 0 || args[0].length() == 0) {
 				ret.add("1");
 				ret.add("2");
@@ -271,10 +422,10 @@ public class SignEditor extends JavaPlugin implements Listener {
 	}
 	
 	public String colourize(String in) {
-		return (" "+in).replaceAll("([^\\\\](\\\\\\\\)*)&(.)", "$1§$3").replaceAll("([^\\\\](\\\\\\\\)*)&(.)", "$1§$3").replaceAll("(([^\\\\])\\\\((\\\\\\\\)*))&(.)", "$2$3&$5").replaceAll("\\\\\\\\", "\\\\").trim();
+		return (" "+in).replaceAll("([^\\\\](\\\\\\\\)*)&(.)", "$1ï¿½$3").replaceAll("([^\\\\](\\\\\\\\)*)&(.)", "$1ï¿½$3").replaceAll("(([^\\\\])\\\\((\\\\\\\\)*))&(.)", "$2$3&$5").replaceAll("\\\\\\\\", "\\\\").trim();
 	}
 	
 	public String decolourize(String in) {
-		return (" "+in).replaceAll("\\\\","\\\\\\\\").replaceAll("&", "\\\\&").replaceAll("§","&").trim();
+		return (" "+in).replaceAll("\\\\","\\\\\\\\").replaceAll("&", "\\\\&").replaceAll("ï¿½","&").trim();
 	}
 }

@@ -1,0 +1,5 @@
+ignoredPlugins:
+ NoCheatPlus:
+  permission: se.edit
+  classes:
+   - fr.neatmonster.nocheatplus
