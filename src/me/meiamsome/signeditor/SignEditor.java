@@ -1,6 +1,7 @@
 package me.meiamsome.signeditor;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
@@ -82,7 +83,12 @@ public class SignEditor extends JavaPlugin implements Listener {
 				sender.sendMessage(ChatColor.AQUA + "[SignEditor]" + ChatColor.RED + " You don't have the permission to do this.");
 				return true;
 			}
-			Block b = play.getTargetBlock((Set<Material>)null, 10);
+			Block b = null;
+			try {
+			    b = play.getTargetBlock((Set<Material>) null, 10);
+			} catch(NoSuchMethodError e) {
+			    b = play.getTargetBlock((HashSet<Byte>) null, 10);
+			}
 			if(b == null) {
 				sender.sendMessage(ChatColor.AQUA + "[SignEditor]" + ChatColor.RED + " You are not targeting any block.");
 				return true;
@@ -359,7 +365,12 @@ public class SignEditor extends JavaPlugin implements Listener {
 				sender.sendMessage(ChatColor.AQUA + "[SignEditor]" + ChatColor.RED + " You don't have the permission to do this.");
 				return null;
 			}
-			Block b = play.getTargetBlock((Set<Material>) null, 10);
+			Block b;
+            try {
+                b = play.getTargetBlock((Set<Material>) null, 10);
+            } catch(NoSuchMethodError e) {
+                b = play.getTargetBlock((HashSet<Byte>) null, 10);
+            }
 			List<String> ret = new ArrayList<String>();
 			if(args.length == 0 && sender.hasPermission("se.reload")) ret.add("reload");
 			if(b == null) {

@@ -1,6 +1,6 @@
 name: SignEditor
 main: me.meiamsome.signeditor.SignEditor
-version: 1.05
+version: 1.06
 author: meiamsome
 commands:
  edit:
