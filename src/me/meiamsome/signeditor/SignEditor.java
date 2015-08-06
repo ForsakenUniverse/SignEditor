@@ -434,10 +434,10 @@ public class SignEditor extends JavaPlugin implements Listener {
 	}
 	
 	public String colourize(String in) {
-		return (" "+in).replaceAll("([^\\\\](\\\\\\\\)*)&(.)", "$1�$3").replaceAll("([^\\\\](\\\\\\\\)*)&(.)", "$1�$3").replaceAll("(([^\\\\])\\\\((\\\\\\\\)*))&(.)", "$2$3&$5").replaceAll("\\\\\\\\", "\\\\").trim();
+		return (" "+in).replaceAll("([^\\\\](\\\\\\\\)*)&(.)", "$1\u00A7$3").replaceAll("([^\\\\](\\\\\\\\)*)&(.)", "$1\u00A7$3").replaceAll("(([^\\\\])\\\\((\\\\\\\\)*))&(.)", "$2$3&$5").replaceAll("\\\\\\\\", "\\\\").trim();
 	}
 	
 	public String decolourize(String in) {
-		return (" "+in).replaceAll("\\\\","\\\\\\\\").replaceAll("&", "\\\\&").replaceAll("�","&").trim();
+		return (" "+in).replaceAll("\\\\","\\\\\\\\").replaceAll("&", "\\\\&").replaceAll("\u00A7","&").trim();
 	}
 }
